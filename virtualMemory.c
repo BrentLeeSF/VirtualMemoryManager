@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+
 FILE *addressFile;
 #define LINELENGTH 10
 char line[LINELENGTH];
@@ -114,7 +115,7 @@ void changeAddress(int logAddress) {
 
 void readBackStore(int page) {
 	
-	if(fseek(backStore, page * FRAMELENGTH, THIS_SET) != 0) {
+	if(fseek(backStore, page * FRAMELENGTH, SEEK_SET) != 0) {
 		printf("ERROR\n");
 	}
 
