@@ -101,6 +101,7 @@ void changeAddress(int logAddress) {
 
 			readBackStore(page);
 			
+			/* REDO!!
 			pageTable[availablePageNumber] = page;
 			pageFrame[availablePageNumber] = frameOpen;
 			frameNum = frameOpen;
@@ -108,13 +109,14 @@ void changeAddress(int logAddress) {
 			pageFault++;
 			frameOpen++;
 			availablePageNumber++;
-			
+			*/
 		}
 	}
+	
 }
 
 void readBackStore(int page) {
-	
+	// SEEK_SET is in fseek() - it seeks from the beginning of the file
 	if(fseek(backStore, page * FRAMELENGTH, SEEK_SET) != 0) {
 		printf("ERROR\n");
 	}
