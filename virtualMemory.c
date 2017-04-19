@@ -3,15 +3,15 @@
 #include <math.h>
 
 
+
+FILE *backStore;
 FILE *addressFile;
+
 #define LINELENGTH 10
-char line[LINELENGTH];
-int logAddress = 0;
 
 #define PAGESIZE 256
 int pageTable[PAGESIZE]; 
 int pageFrame[PAGESIZE];
-//int firstEmptyPage;
 
 #define TLB_LENGTH 16
 int TLBPage[TLB_LENGTH];
@@ -19,22 +19,18 @@ int TLBFrame[TLB_LENGTH];
 int TLBNum = 0;
 int TLBCounter = 0;
 
-int availablePageNumber = 0;
-
-FILE *backStore;
-
 #define FRAMELENGTH 256
-signed char readBacker[FRAMELENGTH];
-#define FRAMESIZE 256
-int physicalLocation[FRAMELENGTH][FRAMESIZE];
-int frameOpen = 0;
+char readBacker[FRAMELENGTH];
+
+#define physicalMemoryBytes 65536
+int physicalMemory[physicalMemoryBytes];
 int pageFault = 0;
 
-int physicalAddress = 0;
 
 
-void changeAddress(int logAddress);
-void readBackStore(int page);
+int changeAddress(int logAddress);
+int readBackStore(int page);
+void initializeInfo(int * arr, int n);
 
 
 int main(int argc, char *argv[]) {
@@ -43,42 +39,64 @@ int main(int argc, char *argv[]) {
 		printf("Please enter two arguements.\nEx: ./file addresses.txt\n");
 	}
 
-	backStore = fopen("BACKING_STORE.bin", "rb");
+	backStore = fopen("BACKING_STORE.bin", "r");
 	if(backStore == NULL) {
-		printf("Null\n");
+		printf("1 Null\n");
 		return -1;
 	}
 
 	addressFile = fopen(argv[1], "r");
 	if(addressFile == NULL) {
-		printf("Null\n");
+		printf("2 Null\n");
 		return -1;
 	}
 
-	int i;
-	for(i = 0; i < PAGESIZE; i++) {
-		pageTable[i] = -1;
-	}
+	initializeInfo(pageTable, PAGESIZE);
+	initializeInfo(pageFrame, PAGESIZE);
+	initializeInfo(TLBPage, TLB_LENGTH);
+	initializeInfo(TLBFrame, TLB_LENGTH);
+
+	int translations = 0;
+	char line[LINELENGTH];
+
 	while(fgets(line, LINELENGTH, addressFile) != NULL) {
-		logAddress = atoi(line);
-		printf("%d\n",logAddress);
-		changeAddress(logAddress);
+		int logAddress = atoi(line);
+		int address = changeAddress(logAddress);
+		printf("Logical Address: %d, Physical Memory: %d, Value: %d\n", logAddress, address, physicalMemory[address]);
+		translations++;
 	}
+
+	printf("\n*** Final Info ***\n");
+	//printf("Number of translations: %d\n", translations);
+	//printf("Number of Page Faults: %d\n", pageFault);
+	printf("Page Fault Rate: %f\n",(float)pageFault/(float)translations);
+	//printf("Number of TLB Hits: %d\n", TLBNum);
+	printf("TLB Rate: %f\n", (float)TLBNum/(float)translations);
+
+	fclose(addressFile);
+	fclose(backStore);
 
 	return 0;
 }
 
-void changeAddress(int logAddress) {
+void initializeInfo(int *arr, int n) {
+	int i;
+	for(i = 0; i < n; i++) {
+		arr[i] = -1;
+	}
+}
 
-	double origPage, offset, intPage;
+int changeAddress(int logAddress) {
+
+	int page = logAddress/PAGESIZE;
+
+	double origPage, decPage, intPage;
+
 	origPage = (double)logAddress/PAGESIZE;
-	offset = modf(origPage, &intPage);
-	offset *= (double)PAGESIZE;
-
-	int page, newFractPage;
-	page = (int)intPage;
-	newFractPage = (int)offset;
-	printf("Int: %d, Fract: %d\n", page, newFractPage);
+	decPage = modf(origPage, &intPage);
+	double offsetDub = decPage * PAGESIZE;
+	int offset = (int)offsetDub;
+	//printf("Page: %d, offSet: %d\n", page, offset);
 
 	int frameNum = -1;
 
@@ -88,52 +106,59 @@ void changeAddress(int logAddress) {
 		if(TLBPage[i] == page) {
 			frameNum = TLBFrame[i];
 			TLBNum++;
-			break;
 		}
 	}
 
 	if(frameNum == -1) {
-		// if not in TLB frame, check in pageTable
-		for(i = 0; i < availablePageNumber; i++) {
-			if(pageTable[i] == page) {
-				frameNum = pageFrame[i];
-				break;
-			}
-		}
 		// if not in either, page fault
-		if(frameNum == -1) {
-			readBackStore(page);
+		if(pageTable[page] == -1) {
+			frameNum = readBackStore(page);
+		}
+		else {
+			// if not in TLB frame, get from pageTable
+			frameNum = pageTable[page];
 		}
 
 		TLBPage[TLBCounter%TLB_LENGTH] = page;
-		TLBFrame[TLBCounter%TLB_LENGTH] = frame;
+		TLBFrame[TLBCounter%TLB_LENGTH] = frameNum;
 		TLBCounter++;
 	}
 
-	physicalAddress = (frame * PAGESIZE) + offset;
-
-	printf("Logical Address: %d, Physical memory: %d, Value: %d\n", logAddress, physicalAddress, physicalLocation[]);
-	
+	return (frameNum * PAGESIZE) + offset;	
 }
 
-void readBackStore(int page) {
+int readBackStore(int page) {
 	// SEEK_SET is in fseek() - it seeks from the beginning of the file
-	if(fseek(backStore, page * FRAMELENGTH, SEEK_SET) != 0) {
+	if(fseek(backStore, page * PAGESIZE, SEEK_SET) != 0) {
 		printf("ERROR\n");
 	}
 
-	int sizin = sizeof(signed char);
-	if(fread(readBacker, sizin, FRAMELENGTH, backStore) == 0) {
+	if(fread(readBacker, sizeof(signed char), PAGESIZE, backStore) == 0) {
 		printf("ERROR\n");
 	}
 
+	// Get available frame by looking for unused index in pageFrame 
 	int i;
-	for(i =0; i < FRAMELENGTH; i++) {
-		physicalLocation[frameOpen][i] = readBacker[i];
+	int availableFrame;
+	for(i =0; i < PAGESIZE; i++) {
+		if(pageFrame[i] == -1) {
+			pageFrame[i] = 0;
+			availableFrame = i;
+			break;
+		}
 	}
-	frameOpen++;
+	// Start at specific index for each frame
+	int startFrameIndex = PAGESIZE * availableFrame;
+	int j;
+	for(j = 0; j < PAGESIZE; j++) {
+		physicalMemory[startFrameIndex] = readBacker[j];
+		startFrameIndex++;
+	}
 
-
+	pageTable[page] = availableFrame;
+	pageFault++;
+	
+	return availableFrame;
 }
 
 
