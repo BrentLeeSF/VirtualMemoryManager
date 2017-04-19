@@ -17,6 +17,7 @@ int pageFrame[PAGESIZE];
 int TLBPage[TLB_LENGTH];
 int TLBFrame[TLB_LENGTH];
 int TLBNum = 0;
+int TLBCounter = 0;
 
 int availablePageNumber = 0;
 
@@ -28,6 +29,8 @@ signed char readBacker[FRAMELENGTH];
 int physicalLocation[FRAMELENGTH][FRAMESIZE];
 int frameOpen = 0;
 int pageFault = 0;
+
+int physicalAddress = 0;
 
 
 void changeAddress(int logAddress);
@@ -77,7 +80,7 @@ void changeAddress(int logAddress) {
 	newFractPage = (int)offset;
 	printf("Int: %d, Fract: %d\n", page, newFractPage);
 
-	int frameNum = pageTable[page];
+	int frameNum = -1;
 
 	int i;
 	// check if in TLB frame
@@ -88,6 +91,7 @@ void changeAddress(int logAddress) {
 			break;
 		}
 	}
+
 	if(frameNum == -1) {
 		// if not in TLB frame, check in pageTable
 		for(i = 0; i < availablePageNumber; i++) {
@@ -98,20 +102,17 @@ void changeAddress(int logAddress) {
 		}
 		// if not in either, page fault
 		if(frameNum == -1) {
-
 			readBackStore(page);
-			
-			/* REDO!!
-			pageTable[availablePageNumber] = page;
-			pageFrame[availablePageNumber] = frameOpen;
-			frameNum = frameOpen;
-
-			pageFault++;
-			frameOpen++;
-			availablePageNumber++;
-			*/
 		}
+
+		TLBPage[TLBCounter%TLB_LENGTH] = page;
+		TLBFrame[TLBCounter%TLB_LENGTH] = frame;
+		TLBCounter++;
 	}
+
+	physicalAddress = (frame * PAGESIZE) + offset;
+
+	printf("Logical Address: %d, Physical memory: %d, Value: %d\n", logAddress, physicalAddress, physicalLocation[]);
 	
 }
 
@@ -130,7 +131,7 @@ void readBackStore(int page) {
 	for(i =0; i < FRAMELENGTH; i++) {
 		physicalLocation[frameOpen][i] = readBacker[i];
 	}
-
+	frameOpen++;
 
 
 }
