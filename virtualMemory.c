@@ -2,6 +2,16 @@
 #include <stdlib.h>
 #include <math.h>
 
+/*
+The goal of this project was to write a program that translates 
+logical address to physical address for a virtual address space 
+of 2^16 (65,536) bytes. We read in the file containing logical 
+addresses, using a TLB as well as a page table, and translated 
+each logical address to its corresponding physical address and 
+output the value of the byte stored at the translated physical 
+address. Then print out these values and ratios (page fault rate 
+and TLB rate).
+*/
 
 
 FILE *backStore;
@@ -39,6 +49,7 @@ int main(int argc, char *argv[]) {
 		printf("Please enter two arguements.\nEx: ./file addresses.txt\n");
 	}
 
+	// Open Files
 	backStore = fopen("BACKING_STORE.bin", "r");
 	if(backStore == NULL) {
 		printf("1 Null\n");
@@ -51,6 +62,7 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
+	// Initialize arrays
 	initializeInfo(pageTable, PAGESIZE);
 	initializeInfo(pageFrame, PAGESIZE);
 	initializeInfo(TLBPage, TLB_LENGTH);
@@ -59,6 +71,9 @@ int main(int argc, char *argv[]) {
 	int translations = 0;
 	char line[LINELENGTH];
 
+	// Go through each line of address file and pass logical address
+	// to Change address, which will translate the ino to a physical 
+	// address
 	while(fgets(line, LINELENGTH, addressFile) != NULL) {
 		int logAddress = atoi(line);
 		int address = changeAddress(logAddress);
@@ -66,13 +81,15 @@ int main(int argc, char *argv[]) {
 		translations++;
 	}
 
+	// Print out results
 	printf("\n*** Final Info ***\n");
-	//printf("Number of translations: %d\n", translations);
-	//printf("Number of Page Faults: %d\n", pageFault);
+	printf("Number of translations: %d\n", translations);
+	printf("Number of Page Faults: %d\n", pageFault);
 	printf("Page Fault Rate: %f\n",(float)pageFault/(float)translations);
-	//printf("Number of TLB Hits: %d\n", TLBNum);
+	printf("Number of TLB Hits: %d\n", TLBNum);
 	printf("TLB Rate: %f\n", (float)TLBNum/(float)translations);
 
+	// Close files
 	fclose(addressFile);
 	fclose(backStore);
 
@@ -86,6 +103,14 @@ void initializeInfo(int *arr, int n) {
 	}
 }
 
+/*
+Gets the page and the offset of the logical address, checks if it's 
+in the TLB page, if it is, save that frame. If not, then either reads 
+the page from the page frame and saves the available frame to be used
+to get info from the backstore into the physical memory array (this is
+a page fault). Then the info is inserted into the TLB page and TLB frame.
+We then return the physical memory address.
+*/
 int changeAddress(int logAddress) {
 
 	int page = logAddress/PAGESIZE;
@@ -127,6 +152,13 @@ int changeAddress(int logAddress) {
 	return (frameNum * PAGESIZE) + offset;	
 }
 
+/*
+Receives the page and reads from the BACK_STORE file and into the 
+readBacker array. We then get the available frame and go through
+the entire page size (256) and insert the info into the physical
+memory array. Next we insert the frame into the page table and
+increase the page faults. Finally we return the frame we used.
+*/
 int readBackStore(int page) {
 	// SEEK_SET is in fseek() - it seeks from the beginning of the file
 	if(fseek(backStore, page * PAGESIZE, SEEK_SET) != 0) {
